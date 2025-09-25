@@ -5,6 +5,7 @@ Simple backend service เขียนด้วย Go + Fiber + MongoDB
 
 ---
 
+```
 ## Project Structure
 ├── app/              # Application setup (Fiber, routes)
 ├── config/           # Config & Database connection
@@ -16,6 +17,7 @@ Simple backend service เขียนด้วย Go + Fiber + MongoDB
 ├── services/         # Business logic
 ├── utils/            # Helper functions (haversine, normalizer, mapper)
 └── main.go           # Entry point
+```
 
 ---
 
