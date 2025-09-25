@@ -5,8 +5,8 @@ Simple backend service เขียนด้วย Go + Fiber + MongoDB
 
 ---
 
-```
 ## Project Structure
+```
 ├── app/              # Application setup (Fiber, routes)
 ├── config/           # Config & Database connection
 ├── controllers/      # HTTP handlers
