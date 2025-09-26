@@ -12,7 +12,6 @@ func RegisterRoutes(app *fiber.App) {
 
 	// Stations
 	api.Get("/stations/nearby", controllers.GetNearbyStations)
-	api.Get("/stations/nearby/paginated", controllers.GetNearbyStationsPaginated)
 	api.Post("/stations/import/url", controllers.ImportUrlStations)
 	api.Post("/stations/import/file", controllers.ImportFileStations)
 
