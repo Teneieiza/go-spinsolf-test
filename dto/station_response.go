@@ -12,6 +12,12 @@ type StationWithDistance struct {
 	DistanceKM  float64            `json:"distance_km"`
 }
 
+type PaginatedResponse[T any] struct {
+	Page     int `json:"page"`
+	PageSize int `json:"page_size"`
+	Data     []T `json:"data"`
+}
+
 
 type ImportStationResponse struct {
     Status  int    `json:"status"`
