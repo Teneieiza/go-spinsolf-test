@@ -48,13 +48,9 @@ Simple backend service เขียนด้วย Go + Fiber + MongoDB
     -  `POST /api/stations/import/file`
     -  Exam: `/api/stations/import/file (form-data: file=...)`
 
-  - Nearlest Station
-    -  `GET /api/stations/nearby`
-    -  Exam: `/api/stations/nearby?lat=13.75&long=100.50&limit=5`
-
   - Nearlest Station with pagination
-    -  `GET /api/stations/nearby/paginated`
-    -  Exam: `/api/stations/nearby/paginated?lat=13.75&long=100.50&page=1&page_size=10`
+    -  `GET /api/stations/nearby`
+    -  Exam: `/api/stations/nearby?lat=13.75&long=100.50&page=1&limit=10`
 
 ---
 
