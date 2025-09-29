@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"math"
 	"sort"
 	"time"
 
@@ -11,11 +10,7 @@ import (
 	"github.com/Teneieiza/go-spinsolf-test/models"
 	"github.com/Teneieiza/go-spinsolf-test/utils"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
-// กำหนดรัศมีโดยประมาณของโลก
-const earthRadius = 6371.0
 
 // GetNearbyStations ดึงสถานีที่ใกล้ที่สุด
 // รับ lat long page และ limit คืนค่าเป็น slice ของ StationWithDistance ในรูปแบบของ PaginatedResponse(มาจากไฟล์ dto/station_response.go นะจ้ะ)
@@ -24,34 +19,15 @@ func GetNearbyStations(lat, long float64, page, limit int) (*dto.PaginatedRespon
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	//กำหนดขอบเขตของพิกัดที่ต้องการค้นหา
-	radiusKM := utils.GetRadiusKM(limit)
-
-	//หาระยะห่างของรัศมีที่ตั้งไว้ตาม radiusKM แปลงเป็นองศา
-	latDelta := (radiusKM / earthRadius) * (180 / math.Pi)
-	longDelta := (radiusKM / earthRadius) * (180 / math.Pi) / math.Cos(lat*math.Pi/180)
-
-	minLat := lat - latDelta
-	maxLat := lat + latDelta
-	minLong := long - longDelta
-	maxLong := long + longDelta
-
-	//filter เฉพาะสถานีที่ active และอยู่ในขอบเขตที่กำหนด
+	//filter เฉพาะสถานีที่ active
 	filter := bson.M{
 		"active": 1,
-		"lat":    bson.M{"$gte": minLat, "$lte": maxLat},
-		"long":   bson.M{"$gte": minLong, "$lte": maxLong},
 	}
 
-	//เรียกใช้งาน multiplier เพื่อดึงข้อมูลเผื่อไว้เนื่องจากถ้าใช้งานในพื้นที่ต่างจังหวัดอาจจะมีสถานีไม่ครบตาม limit ที่ต้องการ
-	//เช่น ต้องการ 10 แต่ในรัศมีที่กำหนดมีแค่ 7 ก็จะได้แค่ 7
-	//ดังนั้นจึงดึงเผื่อไว้ เช่น multiplier = 3 ก็จะได้ station มา 30
-	multiplier := utils.GetMultiplier(limit)
 	col := config.DB.Collection
-	opts := options.Find().SetLimit(int64(limit * multiplier))
 
 	//ค้นหาข้อมูลใน collection โดยใส่ context ไว้ว่าถ้าเวลาเกิน 10วิ ให้ cancel ไป
-	cur, err := col.Find(ctx, filter, opts)
+	cur, err := col.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -71,8 +47,7 @@ func GetNearbyStations(lat, long float64, page, limit int) (*dto.PaginatedRespon
 	for _, s := range stations {
 		dist := utils.Haversine(lat, long, s.Lat, s.Long)
 		//ถ้าระยะทางที่คำนวณได้น้อยกว่าหรือเท่ากับรัศมีที่กำหนดไว้
-		if dist <= radiusKM {
-			//เพิ่มข้อมูลที่ผ่านการคำนวณระยะทางแล้ว ไปใส่ไว้ใน results ตามรูปแบบของ struct station_response.go
+		//เพิ่มข้อมูลที่ผ่านการคำนวณระยะทางแล้ว ไปใส่ไว้ใน results ตามรูปแบบของ struct station_response.go
 			results = append(results, dto.StationWithDistance{
 				ID:          s.ID,
 				StationCode: s.StationCode,
@@ -82,7 +57,6 @@ func GetNearbyStations(lat, long float64, page, limit int) (*dto.PaginatedRespon
 				Long:        s.Long,
 				DistanceKM:  dist,
 			})
-		}
 	}
 
 	//เรียงลำดับข้อมูล results จากน้อยไปมาก
@@ -108,6 +82,9 @@ func GetNearbyStations(lat, long float64, page, limit int) (*dto.PaginatedRespon
 	return &dto.PaginatedResponse[dto.StationWithDistance]{
 		Page:     page,
 		PageSize: limit,
+		Total:    len(results),
+		Start:    start + 1,
+		End:      end,
 		Data:     resultPaginated,
 	}, nil
 }

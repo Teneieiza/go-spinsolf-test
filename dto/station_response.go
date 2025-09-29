@@ -15,12 +15,14 @@ type StationWithDistance struct {
 type PaginatedResponse[T any] struct {
 	Page     int `json:"page"`
 	PageSize int `json:"page_size"`
+	Total    int `json:"total"`
+	Start    int `json:"start"`
+	End      int `json:"end"`
 	Data     []T `json:"data"`
 }
 
-
 type ImportStationResponse struct {
-    Status  int    `json:"status"`
-    Message string `json:"message"`
-    Count   int    `json:"count"`
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+	Count   int    `json:"count"`
 }
