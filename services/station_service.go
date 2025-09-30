@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"math"
 	"sort"
 	"time"
 
@@ -14,44 +13,89 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// กำหนดรัศมีโดยประมาณของโลก
-const earthRadius = 6371.0
+// GetNearbyStations ดึงสถานีใกล้ที่สุด
+// รับ lat long และ limit คืนค่าเป็น slice ของ StationWithDistance(มาจากไฟล์ dto/station_response.go นะจ้ะ)
+func GetNearbyStations(lat, long float64, limit int) ([]dto.StationWithDistance, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-// GetNearbyStations ดึงสถานีที่ใกล้ที่สุด
+	col := config.DB.Collection
+
+  //filter เฉพาะสถานีที่ active และ ใช้ &near เพื่อดูว่าตัวไหนใกล้เคียงกับ lat long ที่ใส่มา
+	filter := bson.M{
+		"active": 1,
+		"location": bson.M{
+			"$near": bson.M{
+				"$geometry": bson.M{
+					"type": "Point",
+					"coordinates": []float64{long, lat},
+				},
+			},
+		},
+	}
+
+	//setlimit ไว้เป็นจำนวณของ limit
+	cur, err := col.Find(ctx, filter,
+		options.Find().SetLimit(int64(limit)),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var stations []models.Station
+	if err := cur.All(ctx, &stations); err != nil {
+		return nil, err
+	}
+
+	results := make([]dto.StationWithDistance, 0, len(stations))
+	for _, s := range stations {
+		dist := utils.Haversine(lat, long, s.Lat, s.Long)
+		results = append(results, dto.StationWithDistance{
+			ID:          s.ID,
+			StationCode: s.StationCode,
+			Name:        s.Name,
+			EnName:      s.EnName,
+			Lat:         s.Lat,
+			Long:        s.Long,
+			DistanceKM:  dist,
+		})
+	}
+
+	return results, nil
+}
+
+
+// GetNearbyStations ดึงสถานีที่ใกล้ที่สุดที่มี pagination
 // รับ lat long page และ limit คืนค่าเป็น slice ของ StationWithDistance ในรูปแบบของ PaginatedResponse(มาจากไฟล์ dto/station_response.go นะจ้ะ)
-func GetNearbyStations(lat, long float64, page, limit int) (*dto.PaginatedResponse[dto.StationWithDistance], error) {
+func GetNearbyStationsPage(lat, long float64, page, limit int) (*dto.PaginatedResponse[dto.StationWithDistance], error) {
 	// ตั้ง context set timeout กัน query ค้าง
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	//กำหนดขอบเขตของพิกัดที่ต้องการค้นหา
-	radiusKM := utils.GetRadiusKM(limit)
+	col := config.DB.Collection
 
-	//หาระยะห่างของรัศมีที่ตั้งไว้ตาม radiusKM แปลงเป็นองศา
-	latDelta := (radiusKM / earthRadius) * (180 / math.Pi)
-	longDelta := (radiusKM / earthRadius) * (180 / math.Pi) / math.Cos(lat*math.Pi/180)
-
-	minLat := lat - latDelta
-	maxLat := lat + latDelta
-	minLong := long - longDelta
-	maxLong := long + longDelta
-
-	//filter เฉพาะสถานีที่ active และอยู่ในขอบเขตที่กำหนด
+	//filter เฉพาะสถานีที่ active และ ใช้ &near เพื่อดูว่าตัวไหนใกล้เคียงกับ lat long ที่ใส่มา
 	filter := bson.M{
 		"active": 1,
-		"lat":    bson.M{"$gte": minLat, "$lte": maxLat},
-		"long":   bson.M{"$gte": minLong, "$lte": maxLong},
+		"location": bson.M{
+			"$near": bson.M{
+				"$geometry": bson.M{
+					"type": "Point",
+					"coordinates": []float64{long, lat},
+				},
+			},
+		},
 	}
 
-	//เรียกใช้งาน multiplier เพื่อดึงข้อมูลเผื่อไว้เนื่องจากถ้าใช้งานในพื้นที่ต่างจังหวัดอาจจะมีสถานีไม่ครบตาม limit ที่ต้องการ
-	//เช่น ต้องการ 10 แต่ในรัศมีที่กำหนดมีแค่ 7 ก็จะได้แค่ 7
-	//ดังนั้นจึงดึงเผื่อไว้ เช่น multiplier = 3 ก็จะได้ station มา 30
-	multiplier := utils.GetMultiplier(limit)
-	col := config.DB.Collection
-	opts := options.Find().SetLimit(int64(limit * multiplier))
+	//set start ไว้
+	start := int64((page - 1) * limit)
 
 	//ค้นหาข้อมูลใน collection โดยใส่ context ไว้ว่าถ้าเวลาเกิน 10วิ ให้ cancel ไป
-	cur, err := col.Find(ctx, filter, opts)
+	//ให้ไปค้าหาข้อมูลที่เริ่มต้นด้วย start และสิ้นสุดที่จำนวณ limit
+	cur, err := col.Find(ctx, filter,
+		options.Find().SetSkip(start).SetLimit(int64(limit)),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -71,18 +115,16 @@ func GetNearbyStations(lat, long float64, page, limit int) (*dto.PaginatedRespon
 	for _, s := range stations {
 		dist := utils.Haversine(lat, long, s.Lat, s.Long)
 		//ถ้าระยะทางที่คำนวณได้น้อยกว่าหรือเท่ากับรัศมีที่กำหนดไว้
-		if dist <= radiusKM {
-			//เพิ่มข้อมูลที่ผ่านการคำนวณระยะทางแล้ว ไปใส่ไว้ใน results ตามรูปแบบของ struct station_response.go
-			results = append(results, dto.StationWithDistance{
-				ID:          s.ID,
-				StationCode: s.StationCode,
-				Name:        s.Name,
-				EnName:      s.EnName,
-				Lat:         s.Lat,
-				Long:        s.Long,
-				DistanceKM:  dist,
-			})
-		}
+		//เพิ่มข้อมูลที่ผ่านการคำนวณระยะทางแล้ว ไปใส่ไว้ใน results ตามรูปแบบของ struct station_response.go
+		results = append(results, dto.StationWithDistance{
+			ID:          s.ID,
+			StationCode: s.StationCode,
+			Name:        s.Name,
+			EnName:      s.EnName,
+			Lat:         s.Lat,
+			Long:        s.Long,
+			DistanceKM:  dist,
+		})
 	}
 
 	//เรียงลำดับข้อมูล results จากน้อยไปมาก
@@ -90,24 +132,17 @@ func GetNearbyStations(lat, long float64, page, limit int) (*dto.PaginatedRespon
 		return results[i].DistanceKM < results[j].DistanceKM
 	})
 
-	//ตัดข้อมูลตาม page และ limit ที่ส่งมา
-	//เช่น limit 10 page 1 ก็จะได้ 0-9, limit 10 page 2 ก็จะได้ 10-19
-	start := (page - 1) * limit
-	if start > len(results) {
-		start = len(results)
-	}
-	end := start + limit
-	if end > len(results) {
-		end = len(results)
+	total, err := col.CountDocuments(ctx, bson.M{"active": 1})
+	if err != nil {
+		return nil, err
 	}
 
-	//ตัด slice results ตาม start end ที่คำนวณได้
-	resultPaginated := results[start:end]
-
-	//คืนค่าเป็น struct PaginatedResponse ที่กำหนดไว้ใน dto/station_response.go
 	return &dto.PaginatedResponse[dto.StationWithDistance]{
 		Page:     page,
 		PageSize: limit,
-		Data:     resultPaginated,
+		Total:    int(total),
+		Start:    int(start) + 1,
+		End:      int(start) + len(results),
+		Data:     results,
 	}, nil
 }
