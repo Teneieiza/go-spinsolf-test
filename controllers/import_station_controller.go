@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 
@@ -33,17 +34,19 @@ func ImportFileStations(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 
-
-	count, err := services.ImportFileStations(file.Filename, data)
+	inserted, updated, corrupted,totalImported, err := services.ImportFileStations(file.Filename, data)
 	if err != nil {
 		return utils.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 	}
 
+	message := fmt.Sprintf("Imported %d new, updated %d existing, %d records corrupted", inserted, updated, corrupted)
+
 	//ส่งกลับจำนวนข้อมูลที่ import ได้ พร้อม message ในรูปแบบ JSON
 	return c.JSON(dto.ImportStationResponse{
 		Status:  200,
-		Message: "stations imported successfully",
-		Count:   count,
+		Message: message,
+		Count:   inserted + updated,
+		TotalImport:  totalImported,
 	})
 }
 
@@ -58,15 +61,18 @@ func ImportUrlStations(c *fiber.Ctx) error {
 
 	//เรียกใช้งาน service ImportUrlStations แล้วส่ง url เข้าไป
 	//ถ้ามี error ให้ส่งกลับ 500 Internal Server Error
-	count, err := services.ImportUrlStations(apiURL)
+	inserted, updated, corrupted, totalImported, err := services.ImportUrlStations(apiURL)
 	if err != nil {
 		return utils.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 	}
 
+	message := fmt.Sprintf("Imported %d new, updated %d existing, %d records corrupted", inserted, updated, corrupted)
+
 	//ส่งกลับจำนวนข้อมูลที่ import ได้ พร้อม message ในรูปแบบ JSON
 	return c.JSON(dto.ImportStationResponse{
 		Status:  200,
-		Message: "stations imported successfully",
-		Count:   count,
+		Message: message,
+		Count:   inserted + updated,
+		TotalImport:  totalImported,
 	})
 }

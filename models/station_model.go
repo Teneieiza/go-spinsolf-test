@@ -22,6 +22,7 @@ type Station struct {
 	Giveway       int                `bson:"giveway" json:"giveway"`
 	DualTrack     int                `bson:"dual_track" json:"dual_track"`
 	Comment       string             `bson:"comment" json:"comment"`
+	Location      map[string]interface{} `bson:"location" json:"location"`
 }
 
 
