@@ -25,4 +25,5 @@ type ImportStationResponse struct {
 	Status  int    `json:"status"`
 	Message string `json:"message"`
 	Count   int    `json:"count"`
+	TotalImport int `json:"totalimported"`
 }
